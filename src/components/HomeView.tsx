@@ -22,7 +22,7 @@ export const HomeView = ({ onStartExam, onShowHistory }: HomeViewProps) => {
         {/* Welcome Section */}
         <div className="text-center mb-12">
           <h1 className="font-serif text-4xl font-bold text-foreground mb-3">
-            Welcome to HSPT Prep
+            Welcome to Placement Prep
           </h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
             Practice makes perfect. Choose a study mode below to start preparing for the 
