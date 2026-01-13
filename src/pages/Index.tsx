@@ -1,13 +1,85 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { useState } from 'react';
+import { HomeView } from '@/components/HomeView';
+import { ExamView } from '@/components/ExamView';
+import { ScoreReport } from '@/components/ScoreReport';
+import { HistoryView } from '@/components/HistoryView';
+import { useExamSession } from '@/hooks/useExamSession';
+import { ExamMode } from '@/types/exam';
+
+type View = 'home' | 'exam' | 'report' | 'history';
 
 const Index = () => {
+  const [view, setView] = useState<View>('home');
+  
+  const {
+    session,
+    currentQuestion,
+    currentIndex,
+    totalQuestions,
+    selectedAnswer,
+    setSelectedAnswer,
+    timeRemaining,
+    startSession,
+    submitAnswer,
+    generateReport,
+    resetSession
+  } = useExamSession();
+
+  const handleStartExam = (mode: ExamMode) => {
+    startSession(mode);
+    setView('exam');
+  };
+
+  const handleSubmitAnswer = () => {
+    submitAnswer();
+    // Check if session is complete after submission
+    if (currentIndex === totalQuestions - 1) {
+      setTimeout(() => setView('report'), 100);
+    }
+  };
+
+  const handleQuitExam = () => {
+    if (confirm('Are you sure you want to exit? Your progress will be saved.')) {
+      resetSession();
+      setView('home');
+    }
+  };
+
+  const handleCloseReport = () => {
+    resetSession();
+    setView('home');
+  };
+
+  const report = generateReport();
+
+  if (view === 'history') {
+    return <HistoryView onBack={() => setView('home')} />;
+  }
+
+  if (view === 'report' && report) {
+    return <ScoreReport report={report} onClose={handleCloseReport} />;
+  }
+
+  if (view === 'exam' && session && currentQuestion) {
+    return (
+      <ExamView
+        question={currentQuestion}
+        currentIndex={currentIndex}
+        totalQuestions={totalQuestions}
+        selectedAnswer={selectedAnswer}
+        onSelectAnswer={setSelectedAnswer}
+        onSubmit={handleSubmitAnswer}
+        onQuit={handleQuitExam}
+        timeRemaining={timeRemaining}
+      />
+    );
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
-      </div>
-    </div>
+    <HomeView 
+      onStartExam={handleStartExam}
+      onShowHistory={() => setView('history')}
+    />
   );
 };
 
