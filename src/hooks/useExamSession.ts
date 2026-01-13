@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Question, QuestionAttempt, ExamSession, ExamMode, ScoreReport, Recommendation, Subject } from '@/types/exam';
+import { Question, QuestionAttempt, ExamSession, ExamMode, ScoreReport, Recommendation, Subject, SubSkill, PacingAnalysis, MistakeAnalysis, PACING_BENCHMARKS, RUSHING_THRESHOLD, OVERTHINKING_THRESHOLD } from '@/types/exam';
 import { examModes } from '@/data/examModes';
 import { getRandomQuestions } from '@/data/questions';
 
@@ -15,13 +15,11 @@ export const useExamSession = () => {
   
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Timer logic
   useEffect(() => {
-    if (session && !session.isComplete && timeRemaining > 0) {
+    if (session && !session.isComplete && !session.isPaused && timeRemaining > 0) {
       timerRef.current = setInterval(() => {
         setTimeRemaining(prev => {
           if (prev <= 1) {
-            // Time's up - auto-complete
             endSession();
             return 0;
           }
@@ -33,13 +31,14 @@ export const useExamSession = () => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [session?.id, session?.isComplete]);
+  }, [session?.id, session?.isComplete, session?.isPaused]);
 
-  const startSession = useCallback((mode: ExamMode) => {
+  const startSession = useCallback((mode: ExamMode, customQuestionCount?: number) => {
     const modeConfig = examModes.find(m => m.id === mode);
     if (!modeConfig) return;
 
-    const sessionQuestions = getRandomQuestions(modeConfig.questionCount, modeConfig.subjects);
+    const count = customQuestionCount || modeConfig.questionCount;
+    const sessionQuestions = getRandomQuestions(count, modeConfig.subjects);
     
     const newSession: ExamSession = {
       id: generateSessionId(),
@@ -47,7 +46,9 @@ export const useExamSession = () => {
       startTime: Date.now(),
       totalTimeAllowed: modeConfig.timeLimit * 60,
       attempts: [],
-      isComplete: false
+      isComplete: false,
+      isPaused: false,
+      totalPausedTime: 0
     };
 
     setSession(newSession);
@@ -57,7 +58,6 @@ export const useExamSession = () => {
     setTimeRemaining(modeConfig.timeLimit * 60);
     setQuestionStartTime(Date.now());
 
-    // Persist to localStorage
     localStorage.setItem('currentSession', JSON.stringify(newSession));
   }, []);
 
@@ -66,16 +66,37 @@ export const useExamSession = () => {
 
     const question = questions[currentIndex];
     const timeSpent = Math.round((Date.now() - questionStartTime) / 1000);
+    const benchmark = PACING_BENCHMARKS[question.subject];
+    const wasOverPace = timeSpent > benchmark;
+    
+    let mistakeType: 'content-gap' | 'rushing' | 'overthinking' | null = null;
+    const isCorrect = selectedAnswer === question.correctAnswer;
+    
+    if (!isCorrect) {
+      if (timeSpent < benchmark * RUSHING_THRESHOLD) {
+        mistakeType = 'rushing';
+      } else if (timeSpent > benchmark * OVERTHINKING_THRESHOLD) {
+        mistakeType = 'overthinking';
+      } else {
+        mistakeType = 'content-gap';
+      }
+    }
 
     const attempt: QuestionAttempt = {
       questionId: question.id,
       subject: question.subject,
-      type: question.type,
+      type: question.subSkill,
+      subSkill: question.subSkill,
+      difficulty: question.difficulty,
       studentAnswer: selectedAnswer,
       correctAnswer: question.correctAnswer,
-      isCorrect: selectedAnswer === question.correctAnswer,
+      isCorrect,
       timeSpent,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      sessionId: session.id,
+      mode: session.mode,
+      mistakeType,
+      wasOverPace
     };
 
     const updatedSession = {
@@ -86,7 +107,6 @@ export const useExamSession = () => {
     setSession(updatedSession);
     localStorage.setItem('currentSession', JSON.stringify(updatedSession));
 
-    // Move to next question or end
     if (currentIndex < questions.length - 1) {
       setCurrentIndex(prev => prev + 1);
       setSelectedAnswer(null);
@@ -107,7 +127,6 @@ export const useExamSession = () => {
 
     setSession(completedSession);
     
-    // Save to history
     const history = JSON.parse(localStorage.getItem('examHistory') || '[]');
     history.push(completedSession);
     localStorage.setItem('examHistory', JSON.stringify(history));
@@ -124,7 +143,6 @@ export const useExamSession = () => {
     const totalCorrect = attempts.filter(a => a.isCorrect).length;
     const accuracy = totalQuestions > 0 ? (totalCorrect / totalQuestions) * 100 : 0;
 
-    // Section scores
     const subjects: Subject[] = ['verbal', 'math', 'reading', 'language'];
     const sectionScores: Record<Subject, { correct: number; total: number; accuracy: number }> = {} as any;
     
@@ -139,11 +157,19 @@ export const useExamSession = () => {
       };
     });
 
-    // Timing analysis
+    // Sub-skill scores
+    const subSkillScores: Partial<Record<SubSkill, { correct: number; total: number; accuracy: number }>> = {};
+    const allSubSkills = [...new Set(attempts.map(a => a.subSkill))];
+    allSubSkills.forEach(subSkill => {
+      const subAttempts = attempts.filter(a => a.subSkill === subSkill);
+      const correct = subAttempts.filter(a => a.isCorrect).length;
+      const total = subAttempts.length;
+      subSkillScores[subSkill] = { correct, total, accuracy: total > 0 ? (correct / total) * 100 : 0 };
+    });
+
     const totalTime = attempts.reduce((sum, a) => sum + a.timeSpent, 0);
     const avgTimePerQuestion = totalQuestions > 0 ? totalTime / totalQuestions : 0;
 
-    // Find slowest section
     let slowestSection: Subject | null = null;
     let maxAvgTime = 0;
     subjects.forEach(subject => {
@@ -157,68 +183,106 @@ export const useExamSession = () => {
       }
     });
 
-    // Generate recommendations
+    // Pacing analysis
+    const questionsOverPace = attempts.filter(a => a.wasOverPace).length;
+    const thirdSize = Math.floor(attempts.length / 3);
+    const firstThird = attempts.slice(0, thirdSize);
+    const lastThird = attempts.slice(-thirdSize);
+
+    const pacingAnalysis: PacingAnalysis = {
+      avgTimePerQuestion,
+      avgTimeBySubject: {} as Record<Subject, number>,
+      avgTimeBySubSkill: {},
+      questionsOverPace,
+      questionsUnderPace: attempts.length - questionsOverPace,
+      percentOverPace: totalQuestions > 0 ? (questionsOverPace / totalQuestions) * 100 : 0,
+      fatigueIndicator: {
+        firstThirdAccuracy: firstThird.length > 0 ? (firstThird.filter(a => a.isCorrect).length / firstThird.length) * 100 : 0,
+        lastThirdAccuracy: lastThird.length > 0 ? (lastThird.filter(a => a.isCorrect).length / lastThird.length) * 100 : 0,
+        firstThirdAvgTime: firstThird.length > 0 ? firstThird.reduce((s, a) => s + a.timeSpent, 0) / firstThird.length : 0,
+        lastThirdAvgTime: lastThird.length > 0 ? lastThird.reduce((s, a) => s + a.timeSpent, 0) / lastThird.length : 0,
+        hasFatigue: false
+      },
+      accuracyVsTime: {
+        fastCorrect: attempts.filter(a => a.isCorrect && a.timeSpent < PACING_BENCHMARKS[a.subject]).length,
+        fastIncorrect: attempts.filter(a => !a.isCorrect && a.timeSpent < PACING_BENCHMARKS[a.subject] * RUSHING_THRESHOLD).length,
+        slowCorrect: attempts.filter(a => a.isCorrect && a.timeSpent > PACING_BENCHMARKS[a.subject]).length,
+        slowIncorrect: attempts.filter(a => !a.isCorrect && a.timeSpent > PACING_BENCHMARKS[a.subject] * OVERTHINKING_THRESHOLD).length
+      }
+    };
+    
+    pacingAnalysis.fatigueIndicator.hasFatigue = 
+      pacingAnalysis.fatigueIndicator.lastThirdAccuracy < pacingAnalysis.fatigueIndicator.firstThirdAccuracy - 10;
+
+    subjects.forEach(s => {
+      const sa = attempts.filter(a => a.subject === s);
+      pacingAnalysis.avgTimeBySubject[s] = sa.length > 0 ? sa.reduce((sum, a) => sum + a.timeSpent, 0) / sa.length : 0;
+    });
+
+    // Mistake analysis
+    const mistakeAnalysis: MistakeAnalysis = {
+      contentGaps: attempts.filter(a => a.mistakeType === 'content-gap').length,
+      rushingErrors: attempts.filter(a => a.mistakeType === 'rushing').length,
+      overthinkingErrors: attempts.filter(a => a.mistakeType === 'overthinking').length
+    };
+
+    // Recommendations
     const recommendations: Recommendation[] = [];
 
-    // Subject-specific recommendations
     if (sectionScores.verbal.total > 0 && sectionScores.verbal.accuracy < 70) {
       recommendations.push({
-        priority: 'high',
-        category: 'verbal',
+        priority: 'high', category: 'verbal',
         title: 'Focus on Verbal Skills',
-        description: 'Practice analogies, vocabulary definitions, and logical reasoning. Review word relationships and synonyms/antonyms.'
+        description: 'Practice analogies, vocabulary, and logic reasoning daily.'
       });
     }
 
     if (sectionScores.math.total > 0 && sectionScores.math.accuracy < 70) {
       recommendations.push({
-        priority: 'high',
-        category: 'math',
+        priority: 'high', category: 'math',
         title: 'Strengthen Math Foundations',
-        description: 'Review arithmetic operations, basic algebra, and geometry formulas. Practice word problem translation.'
+        description: 'Review arithmetic, algebra, and geometry formulas.'
       });
     }
 
     if (sectionScores.reading.total > 0 && sectionScores.reading.accuracy < 70) {
       recommendations.push({
-        priority: 'high',
-        category: 'reading',
+        priority: 'high', category: 'reading',
         title: 'Improve Reading Comprehension',
-        description: 'Practice identifying main ideas, making inferences, and understanding context clues in passages.'
+        description: 'Practice identifying main ideas and making inferences.'
       });
     }
 
     if (sectionScores.language.total > 0 && sectionScores.language.accuracy < 70) {
       recommendations.push({
-        priority: 'high',
-        category: 'language',
+        priority: 'high', category: 'language',
         title: 'Review Grammar Rules',
-        description: 'Focus on subject-verb agreement, punctuation rules, and sentence structure. Practice identifying errors.'
+        description: 'Focus on subject-verb agreement and punctuation.'
       });
     }
 
-    // Pacing recommendation
-    if (avgTimePerQuestion > 60) {
+    if (mistakeAnalysis.rushingErrors > 3) {
       recommendations.push({
-        priority: 'medium',
-        category: 'pacing',
-        title: 'Improve Your Pace',
-        description: 'You\'re spending too long on each question. Practice with timed Quick Drills to build speed.'
+        priority: 'medium', category: 'pacing',
+        title: 'Slow Down',
+        description: 'You\'re rushing through questions. Take time to read carefully.'
       });
     }
 
-    // Logic-specific check
-    const logicAttempts = attempts.filter(a => a.type === 'logic');
-    if (logicAttempts.length > 0) {
-      const logicCorrect = logicAttempts.filter(a => a.isCorrect).length;
-      if ((logicCorrect / logicAttempts.length) < 0.6) {
-        recommendations.push({
-          priority: 'medium',
-          category: 'verbal',
-          title: 'Practice Logic Reasoning',
-          description: 'Use line diagrams to visualize relationships in logic problems. Practice elimination strategies.'
-        });
-      }
+    if (mistakeAnalysis.overthinkingErrors > 3) {
+      recommendations.push({
+        priority: 'medium', category: 'pacing',
+        title: 'Manage Time Better',
+        description: 'Don\'t overthink. If stuck for 60+ seconds, skip and return.'
+      });
+    }
+
+    if (pacingAnalysis.fatigueIndicator.hasFatigue) {
+      recommendations.push({
+        priority: 'medium', category: 'general',
+        title: 'Build Endurance',
+        description: 'Your accuracy dropped toward the end. Practice longer sessions.'
+      });
     }
 
     return {
@@ -227,8 +291,11 @@ export const useExamSession = () => {
       totalQuestions,
       accuracy,
       sectionScores,
+      subSkillScores,
       avgTimePerQuestion,
       slowestSection,
+      pacingAnalysis,
+      mistakeAnalysis,
       recommendations
     };
   }, [session]);

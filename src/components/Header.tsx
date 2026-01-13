@@ -15,10 +15,10 @@ export const Header = ({ onShowHistory, showHistoryButton = true }: HeaderProps)
           </div>
           <div>
             <h1 className="font-serif text-xl font-bold text-foreground">
-              HSPT Prep
+              Placement Prep
             </h1>
             <p className="text-xs text-muted-foreground">
-              High School Placement Test Trainer
+              High School Placement Test Training
             </p>
           </div>
         </div>

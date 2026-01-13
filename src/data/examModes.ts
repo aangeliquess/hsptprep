@@ -4,55 +4,85 @@ export const examModes: ExamModeConfig[] = [
   {
     id: 'full-mock',
     name: 'Full Mock Exam',
-    description: 'Complete practice test simulating the real HSPT experience with all sections.',
-    questionCount: 50,
-    timeLimit: 60,
+    description: 'Complete 300-question practice test simulating the real HSPT experience. Timer runs continuously with auto-save.',
+    questionCount: 300,
+    timeLimit: 180, // 3 hours
     subjects: ['verbal', 'math', 'reading', 'language'],
-    icon: '📝'
+    icon: '📝',
+    allowPause: false
   },
   {
     id: 'verbal-practice',
     name: 'Verbal Skills Practice',
     description: 'Focus on analogies, vocabulary, classification, and logic reasoning.',
-    questionCount: 20,
-    timeLimit: 15,
+    questionCount: 25,
+    timeLimit: 20,
     subjects: ['verbal'],
-    icon: '💬'
+    icon: '💬',
+    allowPause: true
   },
   {
     id: 'math-practice',
     name: 'Math Practice',
     description: 'Practice arithmetic, algebra, geometry, and word problems.',
-    questionCount: 20,
-    timeLimit: 20,
+    questionCount: 25,
+    timeLimit: 30,
     subjects: ['math'],
-    icon: '🔢'
+    icon: '🔢',
+    allowPause: true
   },
   {
     id: 'reading-practice',
     name: 'Reading Comprehension',
     description: 'Improve your reading comprehension and interpretation skills.',
-    questionCount: 15,
-    timeLimit: 15,
+    questionCount: 20,
+    timeLimit: 25,
     subjects: ['reading'],
-    icon: '📖'
+    icon: '📖',
+    allowPause: true
   },
   {
     id: 'language-practice',
     name: 'Language Skills',
     description: 'Master grammar, punctuation, and sentence structure.',
-    questionCount: 15,
-    timeLimit: 12,
+    questionCount: 20,
+    timeLimit: 15,
     subjects: ['language'],
-    icon: '✏️'
+    icon: '✏️',
+    allowPause: true
+  },
+  {
+    id: 'targeted-practice',
+    name: 'Targeted Practice',
+    description: 'Choose your section, sub-skill, and question count (10/25/50).',
+    questionCount: 25,
+    timeLimit: 30,
+    subjects: ['verbal', 'math', 'reading', 'language'],
+    icon: '🎯',
+    allowPause: true
   },
   {
     id: 'quick-drill',
     name: 'Quick Drill',
-    description: 'Fast-paced 10-question sprint across all subjects. Great for daily practice.',
-    questionCount: 10,
-    timeLimit: 8,
+    description: 'Fast-paced sprint across all subjects. Great for daily practice.',
+    questionCount: 15,
+    timeLimit: 12,
     subjects: ['verbal', 'math', 'reading', 'language'],
-    icon: '⚡'
+    icon: '⚡',
+    allowPause: true
+  },
+  {
+    id: 'pacing-drill',
+    name: 'Pacing Drill',
+    description: 'Practice with per-question time targets. Get pace warnings when you exceed recommended time.',
+    questionCount: 15,
+    timeLimit: 15,
+    subjects: ['verbal', 'math', 'reading', 'language'],
+    icon: '⏱️',
+    allowPause: true,
+    isPacingMode: true
   }
 ];
+
+export const QUICK_DRILL_OPTIONS = [5, 10, 15];
+export const TARGETED_PRACTICE_OPTIONS = [10, 25, 50];
