@@ -3,10 +3,11 @@ import { HomeView } from '@/components/HomeView';
 import { ExamView } from '@/components/ExamView';
 import { ScoreReport } from '@/components/ScoreReport';
 import { HistoryView } from '@/components/HistoryView';
+import { VocabularyView } from '@/components/VocabularyView';
 import { useExamSession } from '@/hooks/useExamSession';
 import { ExamMode } from '@/types/exam';
 
-type View = 'home' | 'exam' | 'report' | 'history';
+type View = 'home' | 'exam' | 'report' | 'history' | 'vocabulary';
 
 const Index = () => {
   const [view, setView] = useState<View>('home');
@@ -32,7 +33,6 @@ const Index = () => {
 
   const handleSubmitAnswer = () => {
     submitAnswer();
-    // Check if session is complete after submission
     if (currentIndex === totalQuestions - 1) {
       setTimeout(() => setView('report'), 100);
     }
@@ -51,6 +51,10 @@ const Index = () => {
   };
 
   const report = generateReport();
+
+  if (view === 'vocabulary') {
+    return <VocabularyView onBack={() => setView('home')} />;
+  }
 
   if (view === 'history') {
     return <HistoryView onBack={() => setView('home')} />;
@@ -79,6 +83,7 @@ const Index = () => {
     <HomeView 
       onStartExam={handleStartExam}
       onShowHistory={() => setView('history')}
+      onShowVocabulary={() => setView('vocabulary')}
     />
   );
 };
