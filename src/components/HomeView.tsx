@@ -2,14 +2,16 @@ import { Header } from './Header';
 import { ExamModeCard } from './ExamModeCard';
 import { examModes } from '@/data/examModes';
 import { ExamMode } from '@/types/exam';
-import { Target, Zap, BookOpen } from 'lucide-react';
+import { Target, Zap, BookOpen, BookText } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
 
 interface HomeViewProps {
   onStartExam: (mode: ExamMode) => void;
   onShowHistory: () => void;
+  onShowVocabulary?: () => void;
 }
 
-export const HomeView = ({ onStartExam, onShowHistory }: HomeViewProps) => {
+export const HomeView = ({ onStartExam, onShowHistory, onShowVocabulary }: HomeViewProps) => {
   const fullMock = examModes.find(m => m.id === 'full-mock')!;
   const practiceExams = examModes.filter(m => m.id !== 'full-mock' && m.id !== 'quick-drill');
   const quickDrill = examModes.find(m => m.id === 'quick-drill')!;
@@ -43,6 +45,32 @@ export const HomeView = ({ onStartExam, onShowHistory }: HomeViewProps) => {
             />
           </div>
         </section>
+
+        {/* Vocabulary Practice - NEW */}
+        {onShowVocabulary && (
+          <section className="mb-10">
+            <div className="flex items-center gap-2 mb-4">
+              <BookText className="h-5 w-5 text-primary" />
+              <h2 className="font-serif text-xl font-semibold">Vocabulary Builder</h2>
+            </div>
+            <Card 
+              className="cursor-pointer hover:border-primary transition-colors"
+              onClick={onShowVocabulary}
+            >
+              <CardContent className="flex items-center gap-4 pt-6">
+                <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <BookText className="h-6 w-6 text-primary" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold">Flashcards & Practice</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Learn HSPT vocabulary with flashcards, quizzes, and spaced repetition.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </section>
+        )}
 
         {/* Targeted Practice */}
         <section className="mb-10">
